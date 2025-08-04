@@ -1,0 +1,267 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model for individuals and parties
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  phone           String   @unique
+  name            String
+  age             Int
+  gender          Gender
+  photoUrl        String?
+  isEmailVerified Boolean  @default(false)
+  isPhoneVerified Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Address details
+  address Address?
+
+  // Cases as complainant
+  casesAsComplainant Case[] @relation("Complainant")
+  // Cases as respondent
+  casesAsRespondent Case[] @relation("Respondent")
+  // Cases as witness
+  casesAsWitness CaseWitness[]
+  // Panel roles
+  panelAsLawyer          MediationPanel[] @relation("PanelLawyer")
+  panelAsReligiousScholar MediationPanel[] @relation("PanelReligiousScholar")
+  panelAsSocietyMember   MediationPanel[] @relation("PanelSocietyMember")
+  // Notifications
+  notifications   Notification[]
+
+  @@map("users")
+}
+
+// Address model for user address details
+model Address {
+  id     String @id @default(cuid())
+  street String
+  city   String
+  state  String
+  zip    String
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("addresses")
+}
+
+// Case model for dispute cases
+model Case {
+  id               String        @id @default(cuid())
+  caseNumber       String        @unique @default(cuid())
+  caseType         CaseType
+  issueDescription String
+  status           CaseStatus    @default(PENDING)
+  priority         CasePriority  @default(MEDIUM)
+  
+  // Legal proceedings info
+  isInCourt              Boolean @default(false)
+  isInPoliceStation      Boolean @default(false)
+  courtCaseNumber        String?
+  firNumber              String?
+  courtName              String?
+  policeStationName      String?
+  
+  // Parties involved
+  complainantId     String
+  complainant       User   @relation("Complainant", fields: [complainantId], references: [id])
+  respondentId      String?
+  respondent        User?  @relation("Respondent", fields: [respondentId], references: [id])
+  
+  // Opposite party details (if not registered)
+  oppositePartyName    String?
+  oppositePartyEmail   String?
+  oppositePartyPhone   String?
+  oppositePartyAddress String?
+  
+  // Response from opposite party
+  respondentAccepted   Boolean?
+  respondentResponse   String?
+  respondentResponseAt DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Related entities
+  evidence        Evidence[]
+  witnesses       CaseWitness[]
+  mediationPanel  MediationPanel?
+  notifications   Notification[]
+  caseHistory     CaseHistory[]
+
+  @@map("cases")
+}
+
+// Evidence model for case proofs
+model Evidence {
+  id          String      @id @default(cuid())
+  fileName    String
+  originalName String
+  fileType    FileType
+  fileSize    Int
+  fileUrl     String
+  description String?
+  uploadedAt  DateTime    @default(now())
+
+  caseId String
+  case   Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@map("evidence")
+}
+
+// Case witnesses model
+model CaseWitness {
+  id        String   @id @default(cuid())
+  addedAt   DateTime @default(now())
+
+  caseId String
+  case   Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  witnessId String
+  witness   User   @relation(fields: [witnessId], references: [id])
+
+  @@unique([caseId, witnessId])
+  @@map("case_witnesses")
+}
+
+// Mediation panel model
+model MediationPanel {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  caseId String @unique
+  case   Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  // Panel members
+  lawyerId           String
+  lawyer             User   @relation("PanelLawyer", fields: [lawyerId], references: [id])
+  religiousScholarId String?
+  religiousScholar   User?  @relation("PanelReligiousScholar", fields: [religiousScholarId], references: [id])
+  societyMemberId    String?
+  societyMember      User?  @relation("PanelSocietyMember", fields: [societyMemberId], references: [id])
+
+  // Mediation sessions
+  sessions MediationSession[]
+
+  @@map("mediation_panels")
+}
+
+// Mediation session model
+model MediationSession {
+  id          String            @id @default(cuid())
+  sessionDate DateTime
+  duration    Int? // in minutes
+  notes       String?
+  outcome     SessionOutcome?
+  createdAt   DateTime          @default(now())
+
+  panelId String
+  panel   MediationPanel @relation(fields: [panelId], references: [id], onDelete: Cascade)
+
+  @@map("mediation_sessions")
+}
+
+// Case history for audit trail
+model CaseHistory {
+  id          String   @id @default(cuid())
+  action      String
+  description String
+  timestamp   DateTime @default(now())
+  metadata    Json?
+
+  caseId String
+  case   Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@map("case_history")
+}
+
+// Notification model
+model Notification {
+  id        String           @id @default(cuid())
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  caseId String?
+  case   Case?   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// Enums
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum CaseType {
+  FAMILY
+  BUSINESS
+  CRIMINAL
+  PROPERTY
+  CONTRACT
+  OTHER
+}
+
+enum CaseStatus {
+  PENDING
+  AWAITING_RESPONSE
+  ACCEPTED
+  WITNESSES_NOMINATED
+  PANEL_CREATED
+  MEDIATION_IN_PROGRESS
+  RESOLVED
+  UNRESOLVED
+  CANCELLED
+}
+
+enum CasePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum FileType {
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+}
+
+enum SessionOutcome {
+  ONGOING
+  AGREEMENT_REACHED
+  NO_AGREEMENT
+  POSTPONED
+}
+
+enum NotificationType {
+  CASE_STATUS_UPDATE
+  NEW_MESSAGE
+  PANEL_ASSIGNMENT
+  SESSION_SCHEDULED
+  SYSTEM_ALERT
+}

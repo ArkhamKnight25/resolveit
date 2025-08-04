@@ -1,0 +1,208 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  password    String
+  name        String
+  phone       String?
+  role        Role     @default(USER)
+  isVerified  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Cases as complainant
+  casesAsComplainant  Case[]             @relation("Complainant")
+  // Cases as respondent  
+  casesAsRespondent   Case[]             @relation("Respondent")
+  // Case history entries
+  caseHistory         CaseHistory[]
+  // Notifications
+  notifications       Notification[]
+
+  @@map("users")
+}
+
+// Case model
+model Case {
+  id               String       @id @default(cuid())
+  caseNumber       String       @unique
+  caseType         CaseType
+  issueDescription String
+  status           CaseStatus   @default(PENDING)
+  priority         Priority     @default(MEDIUM)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  // Legal proceedings info
+  isInCourt              Boolean @default(false)
+  isInPoliceStation      Boolean @default(false)
+  courtCaseNumber        String?
+  firNumber              String?
+  courtName              String?
+  policeStationName      String?
+  
+  // Relationships
+  complainantId    String
+  complainant      User         @relation("Complainant", fields: [complainantId], references: [id])
+  respondentId     String?
+  respondent       User?        @relation("Respondent", fields: [respondentId], references: [id])
+  
+  // Opposite party details (if not registered)
+  oppositePartyName    String?
+  oppositePartyEmail   String?
+  oppositePartyPhone   String?
+  oppositePartyAddress String?
+  
+  // Response from opposite party
+  respondentAccepted   Boolean?
+  respondentResponse   String?
+  respondentResponseAt DateTime?
+
+  // Related models
+  evidence         Evidence[]
+  witnesses        Witness[]
+  caseHistory      CaseHistory[]
+  notifications    Notification[]
+  mediationPanel   MediationPanel?
+
+  @@map("cases")
+}
+
+// Evidence model
+model Evidence {
+  id         String   @id @default(cuid())
+  fileName   String
+  fileType   String
+  fileSize   Int
+  filePath   String
+  uploadedAt DateTime @default(now())
+
+  // Relationships
+  caseId     String
+  case       Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@map("evidence")
+}
+
+// Witness model
+model Witness {
+  id           String   @id @default(cuid())
+  name         String
+  email        String
+  phone        String?
+  relationship String
+  statement    String?
+  createdAt    DateTime @default(now())
+
+  // Relationships
+  caseId       String
+  case         Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@map("witnesses")
+}
+
+// Case History model
+model CaseHistory {
+  id          String   @id @default(cuid())
+  action      String
+  description String
+  metadata    Json?
+  timestamp   DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  // Relationships
+  caseId        String
+  case          Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  performedById String
+  performedBy   User   @relation(fields: [performedById], references: [id])
+
+  @@map("case_history")
+}
+
+// Mediation Panel model
+model MediationPanel {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  // Relationships
+  caseId    String   @unique
+  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@map("mediation_panels")
+}
+
+// Notification model
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  // Relationships
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  caseId    String?
+  case      Case?            @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// Enums
+enum Role {
+  USER
+  ADMIN
+}
+
+enum CaseType {
+  FAMILY
+  BUSINESS
+  CRIMINAL
+  PROPERTY
+  CONTRACT
+  OTHER
+}
+
+enum CaseStatus {
+  PENDING
+  AWAITING_RESPONSE
+  ACCEPTED
+  WITNESSES_NOMINATED
+  PANEL_CREATED
+  MEDIATION_IN_PROGRESS
+  RESOLVED
+  UNRESOLVED
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationType {
+  CASE_STATUS_UPDATE
+  NEW_MESSAGE
+  PANEL_ASSIGNMENT
+  SESSION_SCHEDULED
+  SYSTEM_ALERT
+  NEW_RESPONSE
+  PANEL_CREATED
+  CASE_RESOLVED
+  SYSTEM_NOTIFICATION
+}
